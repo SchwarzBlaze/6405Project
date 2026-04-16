@@ -53,7 +53,7 @@ def run_video_analysis(
 
     def guard() -> None:
         if stopped():
-            raise InterruptedError("Video analysis stopped by user.")
+            raise InterruptedError("视频分析已停止。")
 
     if not os.path.isfile(video_path):
         raise FileNotFoundError(video_path)
@@ -62,14 +62,14 @@ def run_video_analysis(
     vinfo = get_video_info(video_path)
     guard()
 
-    log("连接 llama.cpp 服务...")
+    log("连接 AI 服务...")
     model, processor = load_model(server_url=server_url)
     guard()
 
     log(f"抽帧中（{fps:.1f} fps）...")
     frames, timestamps = extract_frames(video_path, fps=fps)
     if not frames:
-        raise RuntimeError("No frames could be extracted from the video.")
+        raise RuntimeError("未能从视频中提取到画面。")
     guard()
 
     frame_paths: list[str] = []

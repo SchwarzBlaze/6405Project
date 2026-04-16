@@ -38,23 +38,23 @@ class LlamaCppServerClient:
         except HTTPError as exc:
             detail = exc.read().decode("utf-8", errors="replace").strip()
             raise RuntimeError(
-                "llama.cpp 服务返回了错误响应。\n"
+                "AI 服务返回了错误响应。\n"
                 f"地址: {self.endpoint}\n"
                 f"HTTP {exc.code}\n"
                 f"详情: {_safe_response_text(detail)}"
             ) from exc
         except URLError as exc:
             raise RuntimeError(
-                "无法连接到 llama.cpp 服务。\n"
+                "无法连接到 AI 服务。\n"
                 f"当前地址: {self.endpoint}\n\n"
-                "请先启动本地服务，例如:\n"
+                "请先启动本地 AI 服务，例如:\n"
                 "  llama-server -hf ggml-org/gemma-4-E2B-it-GGUF\n"
-                "然后再启动桌面学习模式。"
+                "然后再回到程序继续使用。"
             ) from exc
 
         if status_code >= 400:
             raise RuntimeError(
-                "llama.cpp 服务返回了错误响应。\n"
+                "AI 服务返回了错误响应。\n"
                 f"地址: {self.endpoint}\n"
                 f"HTTP {status_code}\n"
                 f"详情: {_safe_response_text(response_text)}"
@@ -64,7 +64,7 @@ class LlamaCppServerClient:
             payload = json.loads(response_text)
         except ValueError as exc:
             raise RuntimeError(
-                "llama.cpp 服务返回的不是合法 JSON。\n"
+                "AI 服务返回的内容无法识别。\n"
                 f"地址: {self.endpoint}\n"
                 f"响应片段: {_safe_response_text(response_text)}"
             ) from exc
@@ -72,7 +72,7 @@ class LlamaCppServerClient:
         try:
             message = payload["choices"][0]["message"]["content"]
         except (KeyError, IndexError, TypeError) as exc:
-            raise RuntimeError(f"llama.cpp 响应格式异常: {payload}") from exc
+            raise RuntimeError(f"AI 服务响应格式异常: {payload}") from exc
 
         reasoning_content = None
         try:
@@ -82,8 +82,8 @@ class LlamaCppServerClient:
 
         if (message == "" or message == [] or message is None) and reasoning_content:
             raise RuntimeError(
-                "llama.cpp 当前把结果停在了 thinking 阶段，未返回正式答案。\n"
-                "请用下面的方式重新启动服务后再试：\n"
+                "AI 服务当前停在思考阶段，还没有返回正式答案。\n"
+                "请按下面的方式重新启动服务后再试：\n"
                 "  llama-server -hf ggml-org/gemma-4-E2B-it-GGUF --reasoning off\n"
                 "如果你仍想保留 thinking，也至少加上：\n"
                 "  --reasoning-budget 0"

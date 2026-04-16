@@ -27,7 +27,7 @@ from analysis.desktop_inference import DesktopInferenceThread
 from analysis.video_worker import VideoAnalysisWorker
 from desktop.capture import CaptureSettings, CaptureThread
 from desktop.subtitle import SubtitleBar
-from desktop.windows import CAPTURE_BACKEND_WGC, WindowDescriptor, is_window_alive, list_windows
+from desktop.windows import WindowDescriptor, is_window_alive, list_windows
 
 DEFAULT_SERVER_URL = "http://127.0.0.1:8080"
 
@@ -77,16 +77,13 @@ WINDOW_STYLE = """
     }
 """
 
-CAPTURE_BACKEND_LABEL = "Windows Graphics Capture"
-
-
 class Launcher(QWidget):
     """Single-window launcher that combines desktop and video modes."""
 
     def __init__(self):
         super().__init__()
         self.setObjectName("launcher")
-        self.setWindowTitle("Study Lens Integrated")
+        self.setWindowTitle("Study Lens")
         self.setMinimumSize(980, 800)
         self.setStyleSheet(WINDOW_STYLE)
 
@@ -109,12 +106,12 @@ class Launcher(QWidget):
         layout.setSpacing(14)
         layout.setContentsMargins(24, 22, 24, 22)
 
-        title = QLabel("Study Lens Integrated")
+        title = QLabel("Study Lens")
         title.setFont(QFont("Microsoft YaHei", 22, QFont.Weight.Bold))
         title.setAlignment(Qt.AlignmentFlag.AlignCenter)
         layout.addWidget(title)
 
-        subtitle = QLabel("桌面学习助手 + 讲座视频分析器（统一 llama.cpp 后端）")
+        subtitle = QLabel("桌面学习辅助与讲座视频整理")
         subtitle.setFont(QFont("Microsoft YaHei", 11))
         subtitle.setStyleSheet("color: #a6adc8;")
         subtitle.setAlignment(Qt.AlignmentFlag.AlignCenter)
@@ -122,15 +119,15 @@ class Launcher(QWidget):
 
         layout.addWidget(
             self._row_with_input(
-                "llama.cpp 服务地址",
+                "AI 服务地址",
                 DEFAULT_SERVER_URL,
                 field_name="server_url",
-                placeholder="例如 http://127.0.0.1:8080 或 http://127.0.0.1:8080/v1/chat/completions",
+                placeholder="默认一般为 http://127.0.0.1:8080",
             )
         )
 
         server_hint = QLabel(
-            "推荐启动命令：`llama-server -hf ggml-org/gemma-4-E2B-it-GGUF --reasoning off`"
+            "使用前请先启动本地 AI 服务。默认地址一般不用改，具体启动方式见 README。"
         )
         server_hint.setWordWrap(True)
         server_hint.setStyleSheet("color: #a6adc8;")
@@ -180,7 +177,7 @@ class Launcher(QWidget):
         preview_layout.setContentsMargins(0, 0, 0, 0)
         preview_layout.setSpacing(8)
 
-        preview_title = QLabel("调试预览：当前送进模型分析的截图")
+        preview_title = QLabel("当前分析画面")
         preview_title.setFont(QFont("Microsoft YaHei", 11, QFont.Weight.Bold))
         preview_layout.addWidget(preview_title)
 
@@ -197,13 +194,6 @@ class Launcher(QWidget):
         )
         preview_layout.addWidget(self._preview_image, 1)
 
-        self._preview_hint = QLabel(
-            "当前固定使用 Windows Graphics Capture 按目标窗口抓取，不再自动回退到区域截屏。"
-        )
-        self._preview_hint.setWordWrap(True)
-        self._preview_hint.setStyleSheet("color: #a6adc8;")
-        preview_layout.addWidget(self._preview_hint)
-
         content_row.addWidget(preview_panel, 1)
 
         right_panel = QWidget()
@@ -211,13 +201,13 @@ class Launcher(QWidget):
         right_layout.setContentsMargins(0, 0, 0, 0)
         right_layout.setSpacing(8)
 
-        log_title = QLabel("最新分析 / 运行日志")
+        log_title = QLabel("分析结果与处理进度")
         log_title.setFont(QFont("Microsoft YaHei", 11, QFont.Weight.Bold))
         right_layout.addWidget(log_title)
 
         self._details = QTextEdit()
         self._details.setReadOnly(True)
-        self._details.setFont(QFont("Consolas", 11))
+        self._details.setFont(QFont("Microsoft YaHei", 10))
         right_layout.addWidget(self._details, 1)
 
         content_row.addWidget(right_panel, 1)
@@ -282,37 +272,31 @@ class Launcher(QWidget):
         row.setContentsMargins(0, 0, 0, 0)
         row.setSpacing(6)
 
-        label = QLabel("采集参数")
+        label = QLabel("画面更新设置")
         row.addWidget(label)
 
         inner = QHBoxLayout()
         inner.setContentsMargins(0, 0, 0, 0)
         inner.setSpacing(10)
 
-        backend_label = QLabel(CAPTURE_BACKEND_LABEL)
-        backend_label.setStyleSheet(
-            "background-color: #11111b; border: 1px solid #45475a; border-radius: 8px; padding: 8px;"
-        )
-        inner.addWidget(self._labeled_widget("采集后端", backend_label), 2)
-
         self._interval_spin = QDoubleSpinBox()
         self._interval_spin.setRange(0.05, 5.00)
         self._interval_spin.setSingleStep(0.05)
         self._interval_spin.setSuffix(" s")
         self._interval_spin.setValue(0.20)
-        inner.addWidget(self._labeled_widget("采集间隔", self._interval_spin), 1)
+        inner.addWidget(self._labeled_widget("检测间隔", self._interval_spin), 1)
 
         self._threshold_spin = QDoubleSpinBox()
         self._threshold_spin.setRange(0.2, 50.0)
         self._threshold_spin.setSingleStep(0.2)
-        self._threshold_spin.setValue(3.0)
+        self._threshold_spin.setValue(1.0)
         inner.addWidget(self._labeled_widget("触发阈值", self._threshold_spin), 1)
 
         row.addLayout(inner)
 
         hint = QLabel(
-            "阈值越小越敏感；在 VS Code 里滚轮轻微滚动不触发时，优先把阈值调低到 0.8~2.0，"
-            "并把采集间隔调低到 0.10~0.20s。"
+            "如果窗口滚动后没有及时触发分析，可以先把“触发阈值”调低，"
+            "再把“检测间隔”调短。"
         )
         hint.setWordWrap(True)
         hint.setStyleSheet("color: #a6adc8;")
@@ -368,7 +352,7 @@ class Launcher(QWidget):
         self._window_combo.clear()
         self._window_combo.addItem("请选择目标窗口", None)
         for item in windows:
-            self._window_combo.addItem(f"{item.title}  [HWND {item.hwnd}]", item.hwnd)
+            self._window_combo.addItem(item.title, item.hwnd)
 
         if previous in self._window_options:
             index = self._window_combo.findData(previous)
@@ -442,14 +426,13 @@ class Launcher(QWidget):
         settings = self._capture_settings()
         self._details.clear()
         self._append_log("桌面学习模式已启动。")
-        self._append_log(f"目标窗口: {target.title} [HWND {target.hwnd}]")
-        self._append_log(f"桌面后端: llama.cpp server @ {self._server_url()}")
+        self._append_log(f"当前窗口: {target.title}")
+        self._append_log(f"AI 服务地址: {self._server_url()}")
         self._append_log(
-            f"采集参数: backend={CAPTURE_BACKEND_LABEL}, interval={settings.interval_seconds:.2f}s, "
-            f"threshold={settings.change_threshold:.2f}"
+            f"检测间隔: {settings.interval_seconds:.2f}s，触发阈值: {settings.change_threshold:.2f}"
         )
         self._active_target = target
-        self._set_busy(f"正在启动桌面学习模式（目标：{target.title}）...")
+        self._set_busy(f"正在启动桌面学习模式（{target.title}）...")
 
         self._desktop_thread = DesktopInferenceThread(
             self._frame_queue,
@@ -472,7 +455,7 @@ class Launcher(QWidget):
         self._subtitle.update_subtitle(
             "桌面学习模式已启动",
             f"目标窗口：{target.title}",
-            "当前会把选中窗口的截图发送到本地 llama.cpp 服务做学术分析。",
+            "程序会读取这个窗口的画面，并自动生成学习辅助分析。",
         )
         self._subtitle.show()
 
@@ -496,7 +479,7 @@ class Launcher(QWidget):
 
         self._append_log(f"开始分析视频: {video_path}")
         self._append_log(f"输出目录: {output_dir}")
-        self._append_log(f"视频后端: llama.cpp server @ {self._server_url()}")
+        self._append_log(f"AI 服务地址: {self._server_url()}")
         self._set_busy("讲座视频分析中...")
 
         self._video_thread = VideoAnalysisWorker(
@@ -535,7 +518,6 @@ class Launcher(QWidget):
         capture_index = payload.get("capture_index")
         change_distance = payload.get("change_distance")
         target_title = payload.get("target_title")
-        target_hwnd = payload.get("target_hwnd")
         capture_interval = payload.get("capture_interval")
         change_threshold = payload.get("change_threshold")
         width = payload.get("width")
@@ -549,31 +531,29 @@ class Launcher(QWidget):
             delay_text = f"{analysis_started_at - captured_at:.2f}s"
 
         if width and height and source_width and source_height and (width != source_width or height != source_height):
-            resolution_text = f"送模分辨率: {width} x {height}（原始: {source_width} x {source_height}）"
+            resolution_text = f"分析分辨率: {width} x {height}（原始画面: {source_width} x {source_height}）"
         elif width and height:
-            resolution_text = f"送模分辨率: {width} x {height}"
+            resolution_text = f"分析分辨率: {width} x {height}"
         else:
-            resolution_text = "送模分辨率: 未知"
+            resolution_text = "分析分辨率: 未知"
 
         meta_lines = [
-            f"目标窗口: {target_title or '未知'}",
-            f"目标 HWND: {target_hwnd if target_hwnd is not None else '未知'}",
+            f"当前窗口: {target_title or '未知'}",
             f"截图编号: {capture_index if capture_index is not None else '未知'}",
-            f"采集后端: {CAPTURE_BACKEND_LABEL}",
-            f"采集间隔: {capture_interval:.2f}s" if capture_interval else "采集间隔: 未知",
+            f"检测间隔: {capture_interval:.2f}s" if capture_interval else "检测间隔: 未知",
             f"触发阈值: {change_threshold:.2f}" if change_threshold is not None else "触发阈值: 未知",
             resolution_text,
-            f"变化得分: {change_distance:.2f}" if change_distance is not None else "变化得分: first",
-            f"捕获时间: {self._format_debug_time(captured_at)}",
+            f"画面变化程度: {change_distance:.2f}" if change_distance is not None else "画面变化程度: 首次捕获",
+            f"截图时间: {self._format_debug_time(captured_at)}",
             f"开始分析: {self._format_debug_time(analysis_started_at)}",
-            f"从截取到开始分析的延迟: {delay_text}",
+            f"处理延迟: {delay_text}",
         ]
         self._preview_meta.setText("\n".join(meta_lines))
 
-        change_text = "first" if change_distance is None else f"{change_distance:.2f}"
+        change_text = "首次捕获" if change_distance is None else f"{change_distance:.2f}"
         self._append_log(
-            f"[调试] 开始分析截图 #{capture_index if capture_index is not None else '?'}，"
-            f"目标窗口={target_title or '未知'}，变化得分={change_text}，延迟={delay_text}"
+            f"正在分析第 {capture_index if capture_index is not None else '?'} 张画面，"
+            f"窗口：{target_title or '未知'}，画面变化程度：{change_text}，处理延迟：{delay_text}"
         )
 
     @Slot(object)

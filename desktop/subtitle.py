@@ -83,7 +83,7 @@ class SubtitleBar(QWidget):
         content_layout.setSpacing(4)
 
         # 主标题
-        self._line1 = QLabel("ScreenLens 已启动，等待屏幕变化...")
+        self._line1 = QLabel("Study Lens 已启动，等待新画面...")
         self._line1.setFont(QFont("Microsoft YaHei", 14))
         self._line1.setStyleSheet("color: white; background: transparent;")
         self._line1.setAlignment(Qt.AlignmentFlag.AlignCenter)

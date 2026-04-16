@@ -17,7 +17,7 @@ from desktop.windows import CAPTURE_BACKEND_WGC, WindowDescriptor
 @dataclass(frozen=True)
 class CaptureSettings:
     interval_seconds: float = 0.20
-    change_threshold: float = 3.0
+    change_threshold: float = 1.0
 
 
 DEFAULT_CAPTURE_SETTINGS = CaptureSettings()

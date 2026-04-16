@@ -48,7 +48,7 @@ class DesktopInferenceThread(QThread):
 
     def run(self):
         try:
-            self.status_changed.emit("正在连接 llama.cpp 服务 ...")
+            self.status_changed.emit("正在连接 AI 服务...")
             client = LlamaCppServerClient(self._server_url)
             self.status_changed.emit("桌面学习模式运行中，等待窗口内容变化 ...")
         except Exception as exc:
