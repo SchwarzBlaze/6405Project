@@ -36,10 +36,8 @@
 ### 1. 准备 Python 环境
 
 ```powershell
-cd D:\codex工作区\6405project\study-lens-integrated
-py -3.11 -m venv .venv311
-. .\.venv311\Scripts\Activate.ps1
-python -m pip install --upgrade pip
+py -3.11 -m venv .venv
+. .\.venv\Scripts\Activate.ps1
 python -m pip install -r requirements.txt
 ```
 
@@ -51,22 +49,10 @@ python -m pip install -r requirements.txt
 llama-server -hf ggml-org/gemma-4-E2B-it-GGUF --reasoning off
 ```
 
-如果 `llama-server` 没进 PATH，也可以用完整路径：
-
-```powershell
-& 'C:\Users\mgavi\AppData\Local\Microsoft\WinGet\Packages\ggml.llamacpp_Microsoft.Winget.Source_8wekyb3d8bbwe\llama-server.exe' -hf ggml-org/gemma-4-E2B-it-GGUF --reasoning off
-```
-
 启动后默认地址是：
 
 ```text
 http://127.0.0.1:8080
-```
-
-程序里填写这个地址即可，程序会自动补成：
-
-```text
-http://127.0.0.1:8080/v1/chat/completions
 ```
 
 ### 3. 启动程序
@@ -102,8 +88,7 @@ python .\main.py
 
 ## 关于窗口捕获
 
-桌面模式当前不再做“区域截图 + 回退补丁”，而是固定使用 `Windows Graphics Capture`。  
-这比简单裁剪桌面区域更接近 OBS 的单窗口捕获思路，也更适合你要的“稳定抓取特定窗口内容”。
+桌面模式当前固定使用 `Windows Graphics Capture`。  
 
 ## 目录结构
 
