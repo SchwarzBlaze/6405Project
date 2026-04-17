@@ -5,12 +5,15 @@ from __future__ import annotations
 import ctypes
 from dataclasses import dataclass
 from ctypes import wintypes
+from pathlib import Path
 
 user32 = ctypes.windll.user32
+kernel32 = ctypes.windll.kernel32
 
 EnumWindowsProc = ctypes.WINFUNCTYPE(ctypes.c_bool, wintypes.HWND, wintypes.LPARAM)
 GWL_EXSTYLE = -20
 WS_EX_TOOLWINDOW = 0x00000080
+PROCESS_QUERY_LIMITED_INFORMATION = 0x1000
 
 CAPTURE_BACKEND_WGC = "windows_graphics_capture"
 
@@ -19,6 +22,13 @@ CAPTURE_BACKEND_WGC = "windows_graphics_capture"
 class WindowDescriptor:
     hwnd: int
     title: str
+    process_name: str = ""
+
+    @property
+    def display_title(self) -> str:
+        if self.process_name and self.process_name.lower() not in self.title.lower():
+            return f"{self.title} - {self.process_name}"
+        return self.title
 
 
 class RECT(ctypes.Structure):
@@ -45,11 +55,14 @@ def list_windows(excluded_hwnds: set[int] | None = None) -> list[WindowDescripto
         if not title:
             return True
 
-        windows.append(WindowDescriptor(hwnd=hwnd_int, title=title))
+        process_name = _get_process_name(hwnd_int)
+        windows.append(
+            WindowDescriptor(hwnd=hwnd_int, title=title, process_name=process_name)
+        )
         return True
 
     user32.EnumWindows(EnumWindowsProc(callback), 0)
-    windows.sort(key=lambda item: item.title.lower())
+    windows.sort(key=lambda item: item.display_title.lower())
     return windows
 
 
@@ -85,3 +98,29 @@ def _get_window_text(hwnd: int) -> str:
     buffer = ctypes.create_unicode_buffer(length + 1)
     user32.GetWindowTextW(hwnd, buffer, length + 1)
     return buffer.value
+
+
+def _get_process_name(hwnd: int) -> str:
+    pid = wintypes.DWORD()
+    user32.GetWindowThreadProcessId(hwnd, ctypes.byref(pid))
+    if not pid.value:
+        return ""
+
+    handle = kernel32.OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, False, pid.value)
+    if not handle:
+        return ""
+
+    try:
+        buffer_len = wintypes.DWORD(32768)
+        buffer = ctypes.create_unicode_buffer(buffer_len.value)
+        ok = kernel32.QueryFullProcessImageNameW(
+            handle,
+            0,
+            buffer,
+            ctypes.byref(buffer_len),
+        )
+        if not ok:
+            return ""
+        return Path(buffer.value).name
+    finally:
+        kernel32.CloseHandle(handle)

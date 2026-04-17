@@ -5,6 +5,7 @@ from __future__ import annotations
 import base64
 import json
 import mimetypes
+import socket
 from pathlib import Path
 from urllib.error import HTTPError, URLError
 from urllib.parse import urlparse
@@ -37,22 +38,42 @@ class LlamaCppServerClient:
                 response_text = response.read().decode("utf-8", errors="replace")
         except HTTPError as exc:
             detail = exc.read().decode("utf-8", errors="replace").strip()
+            if _looks_like_memory_error(detail):
+                raise RuntimeError(
+                    "AI 服务推理失败，可能是显存或内存不足。\n"
+                    f"地址: {self.endpoint}\n"
+                    f"HTTP {exc.code}\n"
+                    f"详情: {_safe_response_text(detail)}"
+                ) from exc
             raise RuntimeError(
                 "AI 服务返回了错误响应。\n"
                 f"地址: {self.endpoint}\n"
                 f"HTTP {exc.code}\n"
                 f"详情: {_safe_response_text(detail)}"
             ) from exc
+        except (TimeoutError, socket.timeout) as exc:
+            raise RuntimeError(
+                "AI 服务响应超时。\n"
+                f"地址: {self.endpoint}\n"
+                "请稍后重试，或减小输入图片尺寸。"
+            ) from exc
         except URLError as exc:
             raise RuntimeError(
                 "无法连接到 AI 服务。\n"
                 f"当前地址: {self.endpoint}\n\n"
-                "请先启动本地 AI 服务，例如:\n"
-                "  llama-server -hf ggml-org/gemma-4-E2B-it-GGUF\n"
+                "请先启动本地 AI 服务，例如：\n"
+                "  llama-server -hf ggml-org/gemma-4-E2B-it-GGUF --reasoning off\n"
                 "然后再回到程序继续使用。"
             ) from exc
 
         if status_code >= 400:
+            if _looks_like_memory_error(response_text):
+                raise RuntimeError(
+                    "AI 服务推理失败，可能是显存或内存不足。\n"
+                    f"地址: {self.endpoint}\n"
+                    f"HTTP {status_code}\n"
+                    f"详情: {_safe_response_text(response_text)}"
+                )
             raise RuntimeError(
                 "AI 服务返回了错误响应。\n"
                 f"地址: {self.endpoint}\n"
@@ -151,3 +172,19 @@ def _safe_response_text(text: str) -> str:
     if len(text) > 500:
         return text[:500] + "..."
     return text
+
+
+def _looks_like_memory_error(text: str) -> bool:
+    lowered = text.lower()
+    return any(
+        key in lowered
+        for key in [
+            "out of memory",
+            "cuda error",
+            "cuda out of memory",
+            "insufficient memory",
+            "failed to allocate",
+            "memory allocation",
+            "vram",
+        ]
+    )

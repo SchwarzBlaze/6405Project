@@ -1,14 +1,21 @@
 # Study Lens
 
-一个面向 Windows 的学习辅助程序，支持两种使用方式：
+Study Lens 是一个面向 Windows 的学习辅助程序，支持两种使用方式：
 
-- 桌面学习模式：选择一个窗口，自动读取当前画面并生成学习辅助分析
+- 桌面学习模式：选择一个窗口，自动读取当前画面并生成学习讲解
 - 讲座视频模式：分析讲座视频，输出文字报告和带注释的视频
 
-## 你可以用它做什么
+## 一键启动
 
-- 阅读 PDF、PPT、网页或代码窗口时，快速获得页面讲解和知识点整理
-- 对讲座视频做分段分析，生成 `report.md` 和 `annotated_video.mp4`
+如果你已经把 CUDA 版 `llama.cpp` 放到了程序目录下的 `llama_cuda` 文件夹，最方便的启动方式是直接双击：
+
+- `start_study_lens.bat`
+
+这个启动器会自动完成以下步骤：
+
+1. 检查本地 AI 服务是否已经在 `http://127.0.0.1:8080` 运行
+2. 如果没有运行，就自动启动 `llama_cuda\llama-server.exe`
+3. 自动打开 Study Lens 主程序
 
 ## 第一次使用
 
@@ -20,47 +27,62 @@ py -3.11 -m venv .venv
 python -m pip install -r requirements.txt
 ```
 
-### 2. 启动本地 AI 服务
+### 2. 准备 CUDA 版 llama.cpp
 
-推荐命令：
+请确认以下文件存在：
 
-```powershell
-llama-server -hf ggml-org/gemma-4-E2B-it-GGUF --reasoning off
+- `llama_cuda\llama-server.exe`
+- `llama_cuda\ggml-cuda.dll`
+下载地址：https://github.com/ggml-org/llama.cpp/releases/download/b8827/llama-b8827-bin-win-cuda-12.4-x64.zip
+
+### 3. 直接双击启动
+
+```text
+start_study_lens.bat
 ```
 
-默认地址一般是：
+## 手动启动
+
+如果你更想手动启动，也可以分两步：
+
+### 1. 启动本地 AI 服务
+
+```powershell
+cd "D:\codex工作区\6405project\study-lens-integrated"
+.\llama_cuda\llama-server.exe -hf ggml-org/gemma-4-E2B-it-GGUF --reasoning off -ngl all -c 8192 -np 1 -fa on
+```
+
+默认地址：
 
 ```text
 http://127.0.0.1:8080
 ```
 
-如果系统提示找不到 `llama-server`，说明 `llama.cpp` 还没有加入环境变量。  
-这时可以直接运行你本机安装目录里的 `llama-server.exe`。
-
-### 3. 启动程序
+### 2. 启动程序
 
 ```powershell
+cd "D:\codex工作区\6405project\study-lens-integrated"
+. .\.venv\Scripts\Activate.ps1
 python .\main.py
 ```
 
 ## 桌面学习模式
 
-1. 先启动本地 AI 服务
-2. 打开程序
-3. 确认 `AI 服务地址`，如果没改过通常保持默认即可
-4. 点击“刷新窗口列表”
-5. 选择要分析的窗口
-6. 按需要调整：
+1. 启动程序
+2. 确认 `AI 服务地址` 保持为默认值 `http://127.0.0.1:8080`
+3. 点击“刷新窗口列表”
+4. 选择要分析的窗口
+5. 按需要调整：
    - `检测间隔`
    - `触发阈值`
-7. 点击“启动桌面学习模式”
+6. 点击“启动桌面学习模式”
 
 建议的起始参数：
 
 - 检测间隔：`0.10 ~ 0.20s`
-- 触发阈值：`0.8 ~ 2.0`
+- 触发阈值：`1.0 ~ 2.0`
 
-如果窗口滚动后没有及时触发分析：
+如果滚动页面后没有及时触发分析：
 
 - 先把 `触发阈值` 调低
 - 再把 `检测间隔` 调短
@@ -69,22 +91,43 @@ python .\main.py
 
 1. 保持本地 AI 服务运行
 2. 点击“选择讲座视频分析”
-3. 选中视频文件
-4. 等待程序输出分析结果
+3. 选择视频文件
+4. 等待程序输出结果
 
-分析完成后，程序会在输出目录中生成：
+分析完成后，会在输出目录生成：
 
 - `report.md`
 - `annotated_video.mp4`
-- `frames/` 截图文件
+- `frames/`
 
 ## 输出位置
 
-默认输出目录是程序下的 `output` 文件夹。  
+默认输出目录是程序下的 `output` 文件夹。
+
 每次分析视频时，程序都会自动新建一个带时间戳的子目录，方便区分不同结果。
 
-## 使用提示
+## 常见问题
 
-- 桌面模式会直接读取你选中的窗口内容，不需要手动框选区域
-- 视频模式报告正常但注释视频文字异常时，请确认系统里有可用的中文字体
-- 如果程序提示无法连接 AI 服务，请先确认 `llama-server` 是否已经启动
+### 双击启动器没有反应
+
+请检查：
+
+- `.venv` 是否已经创建
+- `llama_cuda` 文件夹是否在程序目录下
+- `llama_cuda\llama-server.exe` 是否存在
+
+### 提示无法连接 AI 服务
+
+请确认 `llama-server` 是否已经成功启动，并且地址仍然是：
+
+```text
+http://127.0.0.1:8080
+```
+
+### 视频右侧注释文字异常
+
+请确认系统中有可用的中文字体，例如：
+
+- 微软雅黑
+- 黑体
+- 宋体

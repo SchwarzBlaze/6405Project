@@ -1,28 +1,21 @@
-"""底部悬浮分析窗（可拖动 + 可调节大小）。"""
+"""Floating subtitle window with move and resize support."""
+
+from __future__ import annotations
 
 from PySide6.QtCore import QPoint, QRect, Qt, Signal
-from PySide6.QtGui import QCursor, QFont, QMouseEvent, QScreen
+from PySide6.QtGui import QFont, QMouseEvent, QScreen
 from PySide6.QtWidgets import QApplication, QHBoxLayout, QLabel, QVBoxLayout, QWidget
 
-# 边缘热区宽度（像素），鼠标进入此范围显示 resize 光标
 EDGE = 7
-# 左侧手柄宽度
 HANDLE_WIDTH = 28
 
 
 class SubtitleBar(QWidget):
-    """悬浮字幕条
-
-    - 左侧 ⠿ 手柄拖动移动位置
-    - 四边/四角拖动调节大小，鼠标自动变为对应箭头
-    - 无边框、半透明深色背景、圆角、始终置顶
-    """
-
     _CURSORS = {
-        "L":  Qt.CursorShape.SizeHorCursor,
-        "R":  Qt.CursorShape.SizeHorCursor,
-        "T":  Qt.CursorShape.SizeVerCursor,
-        "B":  Qt.CursorShape.SizeVerCursor,
+        "L": Qt.CursorShape.SizeHorCursor,
+        "R": Qt.CursorShape.SizeHorCursor,
+        "T": Qt.CursorShape.SizeVerCursor,
+        "B": Qt.CursorShape.SizeVerCursor,
         "TL": Qt.CursorShape.SizeFDiagCursor,
         "BR": Qt.CursorShape.SizeFDiagCursor,
         "TR": Qt.CursorShape.SizeBDiagCursor,
@@ -43,22 +36,19 @@ class SubtitleBar(QWidget):
         self.setMouseTracking(True)
 
         self.setMinimumSize(320, 90)
-        self.setMaximumSize(1600, 400)
+        self.setMaximumSize(1600, 420)
 
-        # 交互状态
-        self._action = None      # "move" | "resize"
+        self._action = None
         self._drag_offset = None
         self._resize_edge = None
         self._resize_start_pos = None
         self._resize_start_geo = None
 
-        # 外层水平布局：手柄 + 内容
         outer = QHBoxLayout(self)
         outer.setContentsMargins(0, 0, 0, 0)
         outer.setSpacing(0)
 
-        # 左侧拖动手柄
-        self._handle = QLabel("⠿")
+        self._handle = QLabel("⋮⋮")
         self._handle.setFixedWidth(HANDLE_WIDTH)
         self._handle.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self._handle.setContentsMargins(8, 0, 0, 0)
@@ -70,7 +60,6 @@ class SubtitleBar(QWidget):
         self._handle.setMouseTracking(True)
         outer.addWidget(self._handle)
 
-        # 内容容器
         self._container = QWidget()
         self._container.setMouseTracking(True)
         self._container.setStyleSheet(
@@ -82,7 +71,6 @@ class SubtitleBar(QWidget):
         content_layout.setContentsMargins(20, 10, 24, 10)
         content_layout.setSpacing(4)
 
-        # 主标题
         self._line1 = QLabel("Study Lens 已启动，等待新画面...")
         self._line1.setFont(QFont("Microsoft YaHei", 14))
         self._line1.setStyleSheet("color: white; background: transparent;")
@@ -91,7 +79,6 @@ class SubtitleBar(QWidget):
         self._line1.setMouseTracking(True)
         content_layout.addWidget(self._line1)
 
-        # 副标题
         self._line2 = QLabel("")
         self._line2.setFont(QFont("Microsoft YaHei", 11))
         self._line2.setStyleSheet("color: rgba(255,255,255,180); background: transparent;")
@@ -101,7 +88,15 @@ class SubtitleBar(QWidget):
         self._line2.hide()
         content_layout.addWidget(self._line2)
 
-        # 摘要
+        self._formula = QLabel("")
+        self._formula.setFont(QFont("Cambria Math", 12))
+        self._formula.setStyleSheet("color: rgba(255,255,255,230); background: transparent;")
+        self._formula.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self._formula.setWordWrap(True)
+        self._formula.setMouseTracking(True)
+        self._formula.hide()
+        content_layout.addWidget(self._formula)
+
         self._summary = QLabel("")
         self._summary.setFont(QFont("Microsoft YaHei", 10))
         self._summary.setStyleSheet("color: rgba(255,255,255,205); background: transparent;")
@@ -111,7 +106,6 @@ class SubtitleBar(QWidget):
         self._summary.hide()
         content_layout.addWidget(self._summary)
 
-        # 关键点和下一步
         self._detail = QLabel("")
         self._detail.setFont(QFont("Microsoft YaHei", 9))
         self._detail.setStyleSheet("color: rgba(255,255,255,160); background: transparent;")
@@ -126,12 +120,11 @@ class SubtitleBar(QWidget):
         self._user_moved = False
         self._reposition()
 
-    # --- 公开接口 ---
-
     def update_subtitle(
         self,
         line1: str,
         line2: str = "",
+        formula_text: str = "",
         summary: str = "",
         key_points: list[str] | None = None,
         next_action: str = "",
@@ -142,6 +135,12 @@ class SubtitleBar(QWidget):
             self._line2.show()
         else:
             self._line2.hide()
+
+        if formula_text:
+            self._formula.setText(formula_text)
+            self._formula.show()
+        else:
+            self._formula.hide()
 
         if summary:
             self._summary.setText(summary)
@@ -164,6 +163,8 @@ class SubtitleBar(QWidget):
         target_height = 100
         if line2:
             target_height += 18
+        if formula_text:
+            target_height += 26
         if summary:
             target_height += 56
         if detail_lines:
@@ -171,8 +172,6 @@ class SubtitleBar(QWidget):
         target_height = max(self.minimumHeight(), min(target_height, self.maximumHeight()))
         self.resize(self.width(), target_height)
         self.geometry_changed.emit()
-
-    # --- 初始定位 ---
 
     def _reposition(self):
         screen: QScreen = QApplication.primaryScreen()
@@ -186,31 +185,33 @@ class SubtitleBar(QWidget):
         self.move(x, y)
         self.geometry_changed.emit()
 
-    # --- 区域检测 ---
-
     def _edge_at(self, pos: QPoint) -> str | None:
-        """返回鼠标所在的边/角标识"""
         x, y, w, h = pos.x(), pos.y(), self.width(), self.height()
         on_l = x < EDGE
         on_r = x > w - EDGE
         on_t = y < EDGE
         on_b = y > h - EDGE
 
-        if on_t and on_l: return "TL"
-        if on_t and on_r: return "TR"
-        if on_b and on_l: return "BL"
-        if on_b and on_r: return "BR"
-        if on_l: return "L"
-        if on_r: return "R"
-        if on_t: return "T"
-        if on_b: return "B"
+        if on_t and on_l:
+            return "TL"
+        if on_t and on_r:
+            return "TR"
+        if on_b and on_l:
+            return "BL"
+        if on_b and on_r:
+            return "BR"
+        if on_l:
+            return "L"
+        if on_r:
+            return "R"
+        if on_t:
+            return "T"
+        if on_b:
+            return "B"
         return None
 
     def _on_handle(self, pos: QPoint) -> bool:
-        """判断鼠标是否在左侧手柄区域（排除边缘热区）"""
         return EDGE <= pos.x() < HANDLE_WIDTH and EDGE <= pos.y() < self.height() - EDGE
-
-    # --- 鼠标事件 ---
 
     def mousePressEvent(self, event: QMouseEvent):
         if event.button() != Qt.MouseButton.LeftButton:
@@ -228,7 +229,6 @@ class SubtitleBar(QWidget):
         event.accept()
 
     def mouseMoveEvent(self, event: QMouseEvent):
-        # 正在拖动
         if event.buttons() & Qt.MouseButton.LeftButton:
             if self._action == "resize":
                 self._do_resize(event.globalPosition().toPoint())
@@ -239,7 +239,6 @@ class SubtitleBar(QWidget):
             event.accept()
             return
 
-        # 悬停：更新光标
         pos = event.position().toPoint()
         edge = self._edge_at(pos)
         if edge:
@@ -260,23 +259,27 @@ class SubtitleBar(QWidget):
         self._resize_start_geo = None
         event.accept()
 
-    # --- resize 计算 ---
-
     def _do_resize(self, gpos: QPoint):
         dx = gpos.x() - self._resize_start_pos.x()
         dy = gpos.y() - self._resize_start_pos.y()
         g = QRect(self._resize_start_geo)
         e = self._resize_edge
 
-        if "R" in e: g.setRight(g.right() + dx)
-        if "L" in e: g.setLeft(g.left() + dx)
-        if "B" in e: g.setBottom(g.bottom() + dy)
-        if "T" in e: g.setTop(g.top() + dy)
+        if "R" in e:
+            g.setRight(g.right() + dx)
+        if "L" in e:
+            g.setLeft(g.left() + dx)
+        if "B" in e:
+            g.setBottom(g.bottom() + dy)
+        if "T" in e:
+            g.setTop(g.top() + dy)
 
         w = max(self.minimumWidth(), min(g.width(), self.maximumWidth()))
         h = max(self.minimumHeight(), min(g.height(), self.maximumHeight()))
-        if "L" in e: g.setLeft(g.right() - w + 1)
-        if "T" in e: g.setTop(g.bottom() - h + 1)
+        if "L" in e:
+            g.setLeft(g.right() - w + 1)
+        if "T" in e:
+            g.setTop(g.bottom() - h + 1)
         g.setWidth(w)
         g.setHeight(h)
 

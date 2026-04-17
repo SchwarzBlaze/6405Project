@@ -10,6 +10,7 @@ from pathlib import Path
 from PySide6.QtCore import Qt, Slot
 from PySide6.QtGui import QFont, QPixmap
 from PySide6.QtWidgets import (
+    QComboBox,
     QDoubleSpinBox,
     QFileDialog,
     QHBoxLayout,
@@ -20,7 +21,6 @@ from PySide6.QtWidgets import (
     QTextEdit,
     QVBoxLayout,
     QWidget,
-    QComboBox,
 )
 
 from analysis.desktop_inference import DesktopInferenceThread
@@ -77,6 +77,7 @@ WINDOW_STYLE = """
     }
 """
 
+
 class Launcher(QWidget):
     """Single-window launcher that combines desktop and video modes."""
 
@@ -97,6 +98,7 @@ class Launcher(QWidget):
         self._current_preview_path: str | None = None
         self._window_options: dict[int, WindowDescriptor] = {}
         self._active_target: WindowDescriptor | None = None
+        self._latest_started_capture_index: int | None = None
 
         self._build_ui()
         self._refresh_window_options()
@@ -201,7 +203,7 @@ class Launcher(QWidget):
         right_layout.setContentsMargins(0, 0, 0, 0)
         right_layout.setSpacing(8)
 
-        log_title = QLabel("分析结果与处理进度")
+        log_title = QLabel("最新分析 / 运行日志")
         log_title.setFont(QFont("Microsoft YaHei", 11, QFont.Weight.Bold))
         right_layout.addWidget(log_title)
 
@@ -295,8 +297,7 @@ class Launcher(QWidget):
         row.addLayout(inner)
 
         hint = QLabel(
-            "如果窗口滚动后没有及时触发分析，可以先把“触发阈值”调低，"
-            "再把“检测间隔”调短。"
+            "如果窗口滚动后没有及时触发分析，可以先把“触发阈值”调低，再把“检测间隔”调短。"
         )
         hint.setWordWrap(True)
         hint.setStyleSheet("color: #a6adc8;")
@@ -352,7 +353,7 @@ class Launcher(QWidget):
         self._window_combo.clear()
         self._window_combo.addItem("请选择目标窗口", None)
         for item in windows:
-            self._window_combo.addItem(item.title, item.hwnd)
+            self._window_combo.addItem(item.display_title, item.hwnd)
 
         if previous in self._window_options:
             index = self._window_combo.findData(previous)
@@ -426,13 +427,14 @@ class Launcher(QWidget):
         settings = self._capture_settings()
         self._details.clear()
         self._append_log("桌面学习模式已启动。")
-        self._append_log(f"当前窗口: {target.title}")
+        self._append_log(f"当前窗口: {target.display_title}")
         self._append_log(f"AI 服务地址: {self._server_url()}")
         self._append_log(
             f"检测间隔: {settings.interval_seconds:.2f}s，触发阈值: {settings.change_threshold:.2f}"
         )
         self._active_target = target
-        self._set_busy(f"正在启动桌面学习模式（{target.title}）...")
+        self._latest_started_capture_index = None
+        self._set_busy(f"正在启动桌面学习模式（{target.display_title}）...")
 
         self._desktop_thread = DesktopInferenceThread(
             self._frame_queue,
@@ -454,7 +456,8 @@ class Launcher(QWidget):
         self._capture_thread.start()
         self._subtitle.update_subtitle(
             "桌面学习模式已启动",
-            f"目标窗口：{target.title}",
+            f"目标窗口：{target.display_title}",
+            "",
             "程序会读取这个窗口的画面，并自动生成学习辅助分析。",
         )
         self._subtitle.show()
@@ -466,7 +469,7 @@ class Launcher(QWidget):
             self,
             "选择讲座视频",
             "",
-            "视频文件 (*.mp4 *.avi *.mkv *.mov *.flv *.wmv);;所有文件(*)",
+            "视频文件 (*.mp4 *.avi *.mkv *.mov *.flv *.wmv);;所有文件 (*)",
         )
         if not video_path:
             return
@@ -495,9 +498,21 @@ class Launcher(QWidget):
 
     @Slot(object)
     def _on_desktop_result(self, payload: dict):
+        capture_index = payload.get("capture_index")
+        if (
+            capture_index is not None
+            and self._latest_started_capture_index is not None
+            and capture_index < self._latest_started_capture_index
+        ):
+            self._append_log(
+                f"已丢弃过期结果：第 {capture_index} 张截图的分析晚于新截图返回。"
+            )
+            return
+
         self._subtitle.update_subtitle(
             payload.get("line1", ""),
             payload.get("line2", ""),
+            payload.get("formula_text", ""),
             payload.get("summary", ""),
             payload.get("key_points", []),
             payload.get("next_action", ""),
@@ -516,6 +531,8 @@ class Launcher(QWidget):
             self._preview_image.setText("未找到当前截图文件")
 
         capture_index = payload.get("capture_index")
+        if capture_index is not None:
+            self._latest_started_capture_index = capture_index
         change_distance = payload.get("change_distance")
         target_title = payload.get("target_title")
         capture_interval = payload.get("capture_interval")
@@ -530,8 +547,12 @@ class Launcher(QWidget):
         if captured_at and analysis_started_at:
             delay_text = f"{analysis_started_at - captured_at:.2f}s"
 
-        if width and height and source_width and source_height and (width != source_width or height != source_height):
-            resolution_text = f"分析分辨率: {width} x {height}（原始画面: {source_width} x {source_height}）"
+        if width and height and source_width and source_height and (
+            width != source_width or height != source_height
+        ):
+            resolution_text = (
+                f"分析分辨率: {width} x {height}（原始画面: {source_width} x {source_height}）"
+            )
         elif width and height:
             resolution_text = f"分析分辨率: {width} x {height}"
         else:
@@ -541,14 +562,31 @@ class Launcher(QWidget):
             f"当前窗口: {target_title or '未知'}",
             f"截图编号: {capture_index if capture_index is not None else '未知'}",
             f"检测间隔: {capture_interval:.2f}s" if capture_interval else "检测间隔: 未知",
-            f"触发阈值: {change_threshold:.2f}" if change_threshold is not None else "触发阈值: 未知",
+            (
+                f"触发阈值: {change_threshold:.2f}"
+                if change_threshold is not None
+                else "触发阈值: 未知"
+            ),
             resolution_text,
-            f"画面变化程度: {change_distance:.2f}" if change_distance is not None else "画面变化程度: 首次捕获",
+            (
+                f"画面变化程度: {change_distance:.2f}"
+                if change_distance is not None
+                else "画面变化程度: 首次捕获"
+            ),
             f"截图时间: {self._format_debug_time(captured_at)}",
             f"开始分析: {self._format_debug_time(analysis_started_at)}",
             f"处理延迟: {delay_text}",
         ]
         self._preview_meta.setText("\n".join(meta_lines))
+
+        self._subtitle.update_subtitle(
+            "正在分析当前画面",
+            "已捕获新页面，正在生成新的讲解结果...",
+            "",
+            "",
+            [],
+            "",
+        )
 
         change_text = "首次捕获" if change_distance is None else f"{change_distance:.2f}"
         self._append_log(
@@ -602,6 +640,7 @@ class Launcher(QWidget):
                 break
 
         self._active_target = None
+        self._latest_started_capture_index = None
         self._subtitle.hide()
         self._clear_debug_preview()
         self._set_idle("已停止")

@@ -18,8 +18,8 @@ from analysis.desktop_analyzer import (
 )
 from analysis.llamacpp_client import LlamaCppServerClient
 
-MAX_ANALYSIS_LONG_EDGE = 1024
-MAX_ANALYSIS_AREA = 640_000
+MAX_ANALYSIS_LONG_EDGE = 1280
+MAX_ANALYSIS_AREA = 900_000
 
 
 class DesktopInferenceThread(QThread):
@@ -35,7 +35,7 @@ class DesktopInferenceThread(QThread):
         frame_queue: queue.Queue,
         server_url: str,
         language: str = "Chinese",
-        max_tokens: int = 384,
+        max_tokens: int = 512,
     ):
         super().__init__()
         self._queue = frame_queue
@@ -44,13 +44,13 @@ class DesktopInferenceThread(QThread):
         self._max_tokens = max_tokens
         self._running = True
         self._paused = False
-        self._context = DesktopContext(max_entries=5)
+        self._context = DesktopContext(max_entries=0)
 
     def run(self):
         try:
             self.status_changed.emit("正在连接 AI 服务...")
             client = LlamaCppServerClient(self._server_url)
-            self.status_changed.emit("桌面学习模式运行中，等待窗口内容变化 ...")
+            self.status_changed.emit("桌面学习模式运行中，等待窗口内容变化...")
         except Exception as exc:
             self.error.emit(str(exc))
             return
@@ -101,7 +101,16 @@ class DesktopInferenceThread(QThread):
                         max_tokens=self._max_tokens,
                     )
                     self._context.add(result.summary)
-                    self.analysis_ready.emit(analysis_to_payload(result))
+                    ready_payload = analysis_to_payload(result)
+                    ready_payload.update(
+                        {
+                            "capture_index": meta.get("capture_index"),
+                            "target_title": meta.get("target_title"),
+                            "captured_at": meta.get("captured_at"),
+                            "analysis_started_at": analysis_started_at,
+                        }
+                    )
+                    self.analysis_ready.emit(ready_payload)
                 except Exception as exc:
                     self.error.emit(f"桌面分析失败: {exc}")
 
@@ -144,8 +153,6 @@ class DesktopInferenceThread(QThread):
         new_width = max(48, int(width * scale))
         new_height = max(48, int(height * scale))
 
-        # Keep the resized image close to the model's patch geometry to reduce
-        # visual token pressure on the local server.
         new_width = max(48, (new_width // 48) * 48)
         new_height = max(48, (new_height // 48) * 48)
         if new_width == width and new_height == height:
