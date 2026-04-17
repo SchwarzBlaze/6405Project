@@ -99,6 +99,7 @@ class Launcher(QWidget):
         self._window_options: dict[int, WindowDescriptor] = {}
         self._active_target: WindowDescriptor | None = None
         self._latest_started_capture_index: int | None = None
+        self._last_result_payload: dict | None = None
 
         self._build_ui()
         self._refresh_window_options()
@@ -434,6 +435,7 @@ class Launcher(QWidget):
         )
         self._active_target = target
         self._latest_started_capture_index = None
+        self._last_result_payload = None
         self._set_busy(f"正在启动桌面学习模式（{target.display_title}）...")
 
         self._desktop_thread = DesktopInferenceThread(
@@ -680,3 +682,201 @@ class Launcher(QWidget):
                 Qt.TransformationMode.SmoothTransformation,
             )
         )
+
+    @Slot()
+    def _start_desktop_mode(self):
+        self._stop_all()
+        target = self._selected_target_window()
+        if not target:
+            QMessageBox.information(self, "Study Lens", "请先选择一个要分析的目标窗口。")
+            return
+
+        settings = self._capture_settings()
+        self._details.clear()
+        self._append_log("桌面学习模式已启动。")
+        self._append_log(f"当前窗口: {target.display_title}")
+        self._append_log(f"AI 服务地址: {self._server_url()}")
+        self._append_log(
+            f"检测间隔: {settings.interval_seconds:.2f}s，触发阈值: {settings.change_threshold:.2f}"
+        )
+        self._active_target = target
+        self._latest_started_capture_index = None
+        self._last_result_payload = None
+        self._set_busy(f"正在启动桌面学习模式（{target.display_title}）...")
+
+        self._desktop_thread = DesktopInferenceThread(
+            self._frame_queue,
+            server_url=self._server_url(),
+            language="Chinese",
+        )
+        self._desktop_thread.status_changed.connect(self._status.setText)
+        self._desktop_thread.analysis_started.connect(self._on_desktop_analysis_started)
+        self._desktop_thread.analysis_ready.connect(self._on_desktop_result)
+        self._desktop_thread.error.connect(self._on_worker_error)
+
+        self._capture_thread = CaptureThread(
+            self._frame_queue,
+            target_window_provider=self._active_target_provider,
+            settings_provider=self._capture_settings,
+        )
+
+        self._desktop_thread.start()
+        self._capture_thread.start()
+        self._subtitle.update_subtitle(
+            "桌面学习模式已启动",
+            f"目标窗口：{target.display_title}",
+            "",
+            "",
+            "程序会读取这个窗口的画面，并自动生成学习辅助分析。",
+            [],
+            "",
+        )
+        self._subtitle.show()
+
+    @Slot(object)
+    def _on_desktop_result(self, payload: dict):
+        capture_index = payload.get("capture_index")
+        if (
+            capture_index is not None
+            and self._latest_started_capture_index is not None
+            and capture_index < self._latest_started_capture_index
+        ):
+            self._append_log(
+                f"已丢弃过期结果：第 {capture_index} 张截图的分析晚于新截图返回。"
+            )
+            return
+
+        self._last_result_payload = dict(payload)
+        self._subtitle.update_subtitle(
+            payload.get("line1", ""),
+            payload.get("line2", ""),
+            "",
+            payload.get("formula_text", ""),
+            payload.get("summary", ""),
+            payload.get("key_points", []),
+            payload.get("next_action", ""),
+        )
+        self._details.setPlainText(payload.get("display_text", ""))
+
+    @Slot(object)
+    def _on_desktop_analysis_started(self, payload: dict):
+        image_path = payload.get("image_path")
+        if image_path and os.path.exists(image_path):
+            self._current_preview_path = image_path
+            self._render_preview_pixmap()
+        else:
+            self._current_preview_path = None
+            self._preview_image.clear()
+            self._preview_image.setText("未找到当前截图文件")
+
+        capture_index = payload.get("capture_index")
+        if capture_index is not None:
+            self._latest_started_capture_index = capture_index
+        change_distance = payload.get("change_distance")
+        target_title = payload.get("target_title")
+        capture_interval = payload.get("capture_interval")
+        change_threshold = payload.get("change_threshold")
+        width = payload.get("width")
+        height = payload.get("height")
+        source_width = payload.get("source_width")
+        source_height = payload.get("source_height")
+        captured_at = payload.get("captured_at")
+        analysis_started_at = payload.get("analysis_started_at")
+        delay_text = "未知"
+        if captured_at and analysis_started_at:
+            delay_text = f"{analysis_started_at - captured_at:.2f}s"
+
+        if width and height and source_width and source_height and (
+            width != source_width or height != source_height
+        ):
+            resolution_text = (
+                f"分析分辨率: {width} x {height}（原始画面: {source_width} x {source_height}）"
+            )
+        elif width and height:
+            resolution_text = f"分析分辨率: {width} x {height}"
+        else:
+            resolution_text = "分析分辨率: 未知"
+
+        meta_lines = [
+            f"当前窗口: {target_title or '未知'}",
+            f"截图编号: {capture_index if capture_index is not None else '未知'}",
+            f"检测间隔: {capture_interval:.2f}s" if capture_interval else "检测间隔: 未知",
+            (
+                f"触发阈值: {change_threshold:.2f}"
+                if change_threshold is not None
+                else "触发阈值: 未知"
+            ),
+            resolution_text,
+            (
+                f"画面变化程度: {change_distance:.2f}"
+                if change_distance is not None
+                else "画面变化程度: 首次捕获"
+            ),
+            f"截图时间: {self._format_debug_time(captured_at)}",
+            f"开始分析: {self._format_debug_time(analysis_started_at)}",
+            f"处理延迟: {delay_text}",
+        ]
+        self._preview_meta.setText("\n".join(meta_lines))
+
+        if self._last_result_payload:
+            self._subtitle.update_subtitle(
+                self._last_result_payload.get("line1", ""),
+                self._last_result_payload.get("line2", ""),
+                "已捕获新页面，正在分析新内容...",
+                self._last_result_payload.get("formula_text", ""),
+                self._last_result_payload.get("summary", ""),
+                self._last_result_payload.get("key_points", []),
+                self._last_result_payload.get("next_action", ""),
+            )
+        else:
+            self._subtitle.update_subtitle(
+                "正在分析当前画面",
+                "",
+                "已捕获新页面，正在分析新内容...",
+                "",
+                "",
+                [],
+                "",
+            )
+
+        change_text = "首次捕获" if change_distance is None else f"{change_distance:.2f}"
+        self._append_log(
+            f"正在分析第 {capture_index if capture_index is not None else '?'} 张画面，"
+            f"窗口：{target_title or '未知'}，画面变化程度：{change_text}，处理延迟：{delay_text}"
+        )
+
+    @Slot()
+    def _stop_all(self):
+        if self._capture_thread:
+            self._capture_thread.stop()
+            if not self._capture_thread.wait(2000):
+                self._capture_thread.terminate()
+                self._capture_thread.wait(1000)
+            self._capture_thread = None
+
+        if self._desktop_thread:
+            self._desktop_thread.stop()
+            if not self._desktop_thread.wait(2000):
+                self._desktop_thread.terminate()
+                self._desktop_thread.wait(1000)
+            self._desktop_thread = None
+
+        if self._video_thread:
+            self._video_thread.stop()
+            if not self._video_thread.wait(2000):
+                self._video_thread.terminate()
+                self._video_thread.wait(1000)
+            self._video_thread = None
+
+        while not self._frame_queue.empty():
+            try:
+                self._frame_queue.get_nowait()
+            except queue.Empty:
+                break
+
+        self._active_target = None
+        self._latest_started_capture_index = None
+        self._last_result_payload = None
+        self._subtitle.hide()
+        self._clear_debug_preview()
+        self._set_idle("已停止")

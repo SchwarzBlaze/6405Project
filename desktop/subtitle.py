@@ -3,8 +3,10 @@
 from __future__ import annotations
 
 from PySide6.QtCore import QPoint, QRect, Qt, Signal
-from PySide6.QtGui import QFont, QMouseEvent, QScreen
+from PySide6.QtGui import QFont, QMouseEvent, QPixmap, QScreen
 from PySide6.QtWidgets import QApplication, QHBoxLayout, QLabel, QVBoxLayout, QWidget
+
+from desktop.formula_renderer import render_formula_pixmap
 
 EDGE = 7
 HANDLE_WIDTH = 28
@@ -43,6 +45,7 @@ class SubtitleBar(QWidget):
         self._resize_edge = None
         self._resize_start_pos = None
         self._resize_start_geo = None
+        self._formula_raw_text = ""
 
         outer = QHBoxLayout(self)
         outer.setContentsMargins(0, 0, 0, 0)
@@ -88,11 +91,21 @@ class SubtitleBar(QWidget):
         self._line2.hide()
         content_layout.addWidget(self._line2)
 
+        self._notice = QLabel("")
+        self._notice.setFont(QFont("Microsoft YaHei", 10))
+        self._notice.setStyleSheet("color: rgba(255,255,255,150); background: transparent;")
+        self._notice.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self._notice.setWordWrap(True)
+        self._notice.setMouseTracking(True)
+        self._notice.hide()
+        content_layout.addWidget(self._notice)
+
         self._formula = QLabel("")
         self._formula.setFont(QFont("Cambria Math", 12))
         self._formula.setStyleSheet("color: rgba(255,255,255,230); background: transparent;")
         self._formula.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self._formula.setWordWrap(True)
+        self._formula.setScaledContents(False)
         self._formula.setMouseTracking(True)
         self._formula.hide()
         content_layout.addWidget(self._formula)
@@ -124,6 +137,7 @@ class SubtitleBar(QWidget):
         self,
         line1: str,
         line2: str = "",
+        status_note: str = "",
         formula_text: str = "",
         summary: str = "",
         key_points: list[str] | None = None,
@@ -136,10 +150,19 @@ class SubtitleBar(QWidget):
         else:
             self._line2.hide()
 
+        if status_note:
+            self._notice.setText(status_note)
+            self._notice.show()
+        else:
+            self._notice.hide()
+
         if formula_text:
-            self._formula.setText(formula_text)
+            self._formula_raw_text = formula_text
+            self._apply_formula_render()
             self._formula.show()
         else:
+            self._formula_raw_text = ""
+            self._formula.clear()
             self._formula.hide()
 
         if summary:
@@ -163,6 +186,8 @@ class SubtitleBar(QWidget):
         target_height = 100
         if line2:
             target_height += 18
+        if status_note:
+            target_height += 18
         if formula_text:
             target_height += 26
         if summary:
@@ -184,6 +209,21 @@ class SubtitleBar(QWidget):
         self.resize(w, h)
         self.move(x, y)
         self.geometry_changed.emit()
+
+    def _apply_formula_render(self):
+        if not self._formula_raw_text:
+            self._formula.clear()
+            return
+        pixmap = render_formula_pixmap(
+            self._formula_raw_text,
+            max_width=max(220, self.width() - 80),
+        )
+        if pixmap is not None and not pixmap.isNull():
+            self._formula.setPixmap(pixmap)
+            self._formula.setText("")
+        else:
+            self._formula.setPixmap(QPixmap())
+            self._formula.setText(self._formula_raw_text)
 
     def _edge_at(self, pos: QPoint) -> str | None:
         x, y, w, h = pos.x(), pos.y(), self.width(), self.height()
@@ -292,6 +332,7 @@ class SubtitleBar(QWidget):
 
     def resizeEvent(self, event):
         super().resizeEvent(event)
+        self._apply_formula_render()
         self.geometry_changed.emit()
 
     def showEvent(self, event):

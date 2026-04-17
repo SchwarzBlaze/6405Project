@@ -23,12 +23,16 @@ class WindowDescriptor:
     hwnd: int
     title: str
     process_name: str = ""
+    is_minimized: bool = False
 
     @property
     def display_title(self) -> str:
+        base = self.title
         if self.process_name and self.process_name.lower() not in self.title.lower():
-            return f"{self.title} - {self.process_name}"
-        return self.title
+            base = f"{self.title} - {self.process_name}"
+        if self.is_minimized:
+            return f"{base} [已最小化]"
+        return base
 
 
 class RECT(ctypes.Structure):
@@ -57,7 +61,12 @@ def list_windows(excluded_hwnds: set[int] | None = None) -> list[WindowDescripto
 
         process_name = _get_process_name(hwnd_int)
         windows.append(
-            WindowDescriptor(hwnd=hwnd_int, title=title, process_name=process_name)
+            WindowDescriptor(
+                hwnd=hwnd_int,
+                title=title,
+                process_name=process_name,
+                is_minimized=bool(user32.IsIconic(hwnd_int)),
+            )
         )
         return True
 
@@ -74,8 +83,6 @@ def _is_capturable_window(hwnd: int) -> bool:
     if not hwnd or not user32.IsWindow(hwnd):
         return False
     if not user32.IsWindowVisible(hwnd):
-        return False
-    if user32.IsIconic(hwnd):
         return False
 
     exstyle = user32.GetWindowLongW(hwnd, GWL_EXSTYLE)
