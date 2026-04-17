@@ -48,7 +48,6 @@ start_study_lens.bat
 ### 1. 启动本地 AI 服务
 
 ```powershell
-cd "D:\codex工作区\6405project\study-lens-integrated"
 .\llama_cuda\llama-server.exe -hf ggml-org/gemma-4-E2B-it-GGUF --reasoning off -ngl all -c 8192 -np 1 -fa on
 ```
 
@@ -61,7 +60,6 @@ http://127.0.0.1:8080
 ### 2. 启动程序
 
 ```powershell
-cd "D:\codex工作区\6405project\study-lens-integrated"
 . .\.venv\Scripts\Activate.ps1
 python .\main.py
 ```
