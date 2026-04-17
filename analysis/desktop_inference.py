@@ -17,6 +17,7 @@ from analysis.desktop_analyzer import (
     analyze_desktop_image_via_llamacpp,
 )
 from analysis.llamacpp_client import LlamaCppServerClient
+from app_i18n import model_output_language, normalize_ui_language, tr
 
 MAX_ANALYSIS_LONG_EDGE = 1280
 MAX_ANALYSIS_AREA = 900_000
@@ -36,21 +37,27 @@ class DesktopInferenceThread(QThread):
         server_url: str,
         language: str = "Chinese",
         max_tokens: int = 512,
+        ui_language: str = "zh",
     ):
         super().__init__()
         self._queue = frame_queue
         self._server_url = server_url
         self._language = language
+        self._ui_language = normalize_ui_language(ui_language)
         self._max_tokens = max_tokens
         self._running = True
         self._paused = False
         self._context = DesktopContext(max_entries=0)
 
+    def set_language(self, ui_language: str) -> None:
+        self._ui_language = normalize_ui_language(ui_language)
+        self._language = model_output_language(self._ui_language)
+
     def run(self):
         try:
-            self.status_changed.emit("正在连接 AI 服务...")
-            client = LlamaCppServerClient(self._server_url)
-            self.status_changed.emit("桌面学习模式运行中，等待窗口内容变化...")
+            self.status_changed.emit(tr(self._ui_language, "service_connecting"))
+            client = LlamaCppServerClient(self._server_url, ui_language=self._ui_language)
+            self.status_changed.emit(tr(self._ui_language, "desktop_waiting_for_change"))
         except Exception as exc:
             self.error.emit(str(exc))
             return
@@ -101,7 +108,7 @@ class DesktopInferenceThread(QThread):
                         max_tokens=self._max_tokens,
                     )
                     self._context.add(result.summary)
-                    ready_payload = analysis_to_payload(result)
+                    ready_payload = analysis_to_payload(result, language=self._language)
                     ready_payload.update(
                         {
                             "capture_index": meta.get("capture_index"),
@@ -112,7 +119,13 @@ class DesktopInferenceThread(QThread):
                     )
                     self.analysis_ready.emit(ready_payload)
                 except Exception as exc:
-                    self.error.emit(f"桌面分析失败: {exc}")
+                    self.error.emit(
+                        tr(
+                            self._ui_language,
+                            "desktop_analysis_failed_prefix",
+                            message=str(exc),
+                        )
+                    )
 
     def pause(self):
         self._paused = True
@@ -152,9 +165,9 @@ class DesktopInferenceThread(QThread):
 
         new_width = max(48, int(width * scale))
         new_height = max(48, int(height * scale))
-
         new_width = max(48, (new_width // 48) * 48)
         new_height = max(48, (new_height // 48) * 48)
+
         if new_width == width and new_height == height:
             return image
 

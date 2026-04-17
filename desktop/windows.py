@@ -1,11 +1,13 @@
-"""Windows window-enumeration helpers for target-window capture."""
+"""Window enumeration helpers for Study Lens."""
 
 from __future__ import annotations
 
 import ctypes
+import os
 from dataclasses import dataclass
 from ctypes import wintypes
-from pathlib import Path
+
+from app_i18n import normalize_ui_language
 
 user32 = ctypes.windll.user32
 kernel32 = ctypes.windll.kernel32
@@ -26,13 +28,17 @@ class WindowDescriptor:
     is_minimized: bool = False
 
     @property
-    def display_title(self) -> str:
-        base = self.title
+    def base_title(self) -> str:
         if self.process_name and self.process_name.lower() not in self.title.lower():
-            base = f"{self.title} - {self.process_name}"
+            return f"{self.title} - {self.process_name}"
+        return self.title
+
+    def formatted_title(self, ui_language: str = "zh") -> str:
+        text = self.base_title
         if self.is_minimized:
-            return f"{base} [已最小化]"
-        return base
+            suffix = " [已最小化]" if normalize_ui_language(ui_language) == "zh" else " [Minimized]"
+            return f"{text}{suffix}"
+        return text
 
 
 class RECT(ctypes.Structure):
@@ -71,7 +77,7 @@ def list_windows(excluded_hwnds: set[int] | None = None) -> list[WindowDescripto
         return True
 
     user32.EnumWindows(EnumWindowsProc(callback), 0)
-    windows.sort(key=lambda item: item.display_title.lower())
+    windows.sort(key=lambda item: item.base_title.lower())
     return windows
 
 
@@ -92,7 +98,7 @@ def _is_capturable_window(hwnd: int) -> bool:
     rect = RECT()
     if not user32.GetWindowRect(hwnd, ctypes.byref(rect)):
         return False
-    if rect.right <= rect.left or rect.bottom <= rect.top:
+    if rect.right - rect.left < 64 or rect.bottom - rect.top < 64:
         return False
 
     return True
@@ -100,34 +106,29 @@ def _is_capturable_window(hwnd: int) -> bool:
 
 def _get_window_text(hwnd: int) -> str:
     length = user32.GetWindowTextLengthW(hwnd)
-    if length <= 0:
-        return ""
     buffer = ctypes.create_unicode_buffer(length + 1)
-    user32.GetWindowTextW(hwnd, buffer, length + 1)
+    user32.GetWindowTextW(hwnd, buffer, len(buffer))
     return buffer.value
 
 
 def _get_process_name(hwnd: int) -> str:
-    pid = wintypes.DWORD()
-    user32.GetWindowThreadProcessId(hwnd, ctypes.byref(pid))
-    if not pid.value:
+    process_id = wintypes.DWORD()
+    user32.GetWindowThreadProcessId(hwnd, ctypes.byref(process_id))
+    if not process_id.value:
         return ""
 
-    handle = kernel32.OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, False, pid.value)
+    handle = kernel32.OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, False, process_id.value)
     if not handle:
         return ""
 
     try:
         buffer_len = wintypes.DWORD(32768)
         buffer = ctypes.create_unicode_buffer(buffer_len.value)
-        ok = kernel32.QueryFullProcessImageNameW(
-            handle,
-            0,
-            buffer,
-            ctypes.byref(buffer_len),
-        )
-        if not ok:
+        query_name = getattr(kernel32, "QueryFullProcessImageNameW", None)
+        if not query_name:
             return ""
-        return Path(buffer.value).name
+        if not query_name(handle, 0, buffer, ctypes.byref(buffer_len)):
+            return ""
+        return os.path.basename(buffer.value)
     finally:
         kernel32.CloseHandle(handle)

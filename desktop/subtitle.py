@@ -6,6 +6,7 @@ from PySide6.QtCore import QPoint, QRect, Qt, Signal
 from PySide6.QtGui import QFont, QMouseEvent, QPixmap, QScreen
 from PySide6.QtWidgets import QApplication, QHBoxLayout, QLabel, QVBoxLayout, QWidget
 
+from app_i18n import tr
 from desktop.formula_renderer import render_formula_pixmap
 
 EDGE = 7
@@ -26,8 +27,9 @@ class SubtitleBar(QWidget):
 
     geometry_changed = Signal()
 
-    def __init__(self):
+    def __init__(self, ui_language: str = "zh"):
         super().__init__()
+        self._ui_language = ui_language
 
         self.setWindowFlags(
             Qt.WindowType.FramelessWindowHint
@@ -74,7 +76,7 @@ class SubtitleBar(QWidget):
         content_layout.setContentsMargins(20, 10, 24, 10)
         content_layout.setSpacing(4)
 
-        self._line1 = QLabel("Study Lens 已启动，等待新画面...")
+        self._line1 = QLabel(tr(self._ui_language, "subtitle_waiting"))
         self._line1.setFont(QFont("Microsoft YaHei", 14))
         self._line1.setStyleSheet("color: white; background: transparent;")
         self._line1.setAlignment(Qt.AlignmentFlag.AlignCenter)
@@ -133,6 +135,11 @@ class SubtitleBar(QWidget):
         self._user_moved = False
         self._reposition()
 
+    def set_language(self, ui_language: str) -> None:
+        self._ui_language = ui_language
+        if not self._line1.text().strip():
+            self._line1.setText(tr(self._ui_language, "subtitle_waiting"))
+
     def update_subtitle(
         self,
         line1: str,
@@ -143,7 +150,7 @@ class SubtitleBar(QWidget):
         key_points: list[str] | None = None,
         next_action: str = "",
     ):
-        self._line1.setText(line1 if line1 else "")
+        self._line1.setText(line1 if line1 else tr(self._ui_language, "subtitle_waiting"))
         if line2:
             self._line2.setText(line2)
             self._line2.show()
@@ -172,10 +179,11 @@ class SubtitleBar(QWidget):
             self._summary.hide()
 
         detail_lines: list[str] = []
+        bullet_prefix = tr(self._ui_language, "detail_bullet_prefix")
         if key_points:
-            detail_lines.extend(f"• {point}" for point in key_points if point)
+            detail_lines.extend(f"{bullet_prefix}{point}" for point in key_points if point)
         if next_action:
-            detail_lines.append(f"下一步：{next_action}")
+            detail_lines.append(f"{tr(self._ui_language, 'next_step_prefix')} {next_action}")
 
         if detail_lines:
             self._detail.setText("\n".join(detail_lines))
@@ -203,10 +211,10 @@ class SubtitleBar(QWidget):
         if not screen:
             return
         geo = screen.availableGeometry()
-        w, h = 620, 150
-        x = geo.x() + (geo.width() - w) // 2
-        y = geo.y() + geo.height() - h - 48
-        self.resize(w, h)
+        width, height = 620, 150
+        x = geo.x() + (geo.width() - width) // 2
+        y = geo.y() + geo.height() - height - 48
+        self.resize(width, height)
         self.move(x, y)
         self.geometry_changed.emit()
 
@@ -226,27 +234,27 @@ class SubtitleBar(QWidget):
             self._formula.setText(self._formula_raw_text)
 
     def _edge_at(self, pos: QPoint) -> str | None:
-        x, y, w, h = pos.x(), pos.y(), self.width(), self.height()
-        on_l = x < EDGE
-        on_r = x > w - EDGE
-        on_t = y < EDGE
-        on_b = y > h - EDGE
+        x, y, width, height = pos.x(), pos.y(), self.width(), self.height()
+        on_left = x < EDGE
+        on_right = x > width - EDGE
+        on_top = y < EDGE
+        on_bottom = y > height - EDGE
 
-        if on_t and on_l:
+        if on_top and on_left:
             return "TL"
-        if on_t and on_r:
+        if on_top and on_right:
             return "TR"
-        if on_b and on_l:
+        if on_bottom and on_left:
             return "BL"
-        if on_b and on_r:
+        if on_bottom and on_right:
             return "BR"
-        if on_l:
+        if on_left:
             return "L"
-        if on_r:
+        if on_right:
             return "R"
-        if on_t:
+        if on_top:
             return "T"
-        if on_b:
+        if on_bottom:
             return "B"
         return None
 
@@ -299,31 +307,31 @@ class SubtitleBar(QWidget):
         self._resize_start_geo = None
         event.accept()
 
-    def _do_resize(self, gpos: QPoint):
-        dx = gpos.x() - self._resize_start_pos.x()
-        dy = gpos.y() - self._resize_start_pos.y()
-        g = QRect(self._resize_start_geo)
-        e = self._resize_edge
+    def _do_resize(self, global_pos: QPoint):
+        dx = global_pos.x() - self._resize_start_pos.x()
+        dy = global_pos.y() - self._resize_start_pos.y()
+        geometry = QRect(self._resize_start_geo)
+        edge = self._resize_edge
 
-        if "R" in e:
-            g.setRight(g.right() + dx)
-        if "L" in e:
-            g.setLeft(g.left() + dx)
-        if "B" in e:
-            g.setBottom(g.bottom() + dy)
-        if "T" in e:
-            g.setTop(g.top() + dy)
+        if "R" in edge:
+            geometry.setRight(geometry.right() + dx)
+        if "L" in edge:
+            geometry.setLeft(geometry.left() + dx)
+        if "B" in edge:
+            geometry.setBottom(geometry.bottom() + dy)
+        if "T" in edge:
+            geometry.setTop(geometry.top() + dy)
 
-        w = max(self.minimumWidth(), min(g.width(), self.maximumWidth()))
-        h = max(self.minimumHeight(), min(g.height(), self.maximumHeight()))
-        if "L" in e:
-            g.setLeft(g.right() - w + 1)
-        if "T" in e:
-            g.setTop(g.bottom() - h + 1)
-        g.setWidth(w)
-        g.setHeight(h)
+        width = max(self.minimumWidth(), min(geometry.width(), self.maximumWidth()))
+        height = max(self.minimumHeight(), min(geometry.height(), self.maximumHeight()))
+        if "L" in edge:
+            geometry.setLeft(geometry.right() - width + 1)
+        if "T" in edge:
+            geometry.setTop(geometry.bottom() - height + 1)
+        geometry.setWidth(width)
+        geometry.setHeight(height)
 
-        self.setGeometry(g)
+        self.setGeometry(geometry)
         self.geometry_changed.emit()
 
     def moveEvent(self, event):

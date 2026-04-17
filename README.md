@@ -1,23 +1,32 @@
 # Study Lens
 
-Study Lens 是一个面向 Windows 的学习辅助程序，支持两种使用方式：
+Study Lens 是一个运行在 Windows 上的学习辅助程序，支持两种使用方式：
 
-- 桌面学习模式：选择一个窗口，自动读取当前画面并生成学习讲解
-- 讲座视频模式：分析讲座视频，输出文字报告和带注释的视频
+- 桌面学习模式：选择一个窗口，自动捕获页面变化并生成学习讲解
+- 讲座视频模式：分析讲座视频，输出 Markdown 报告和带注释的视频
+
+现在程序支持在界面中切换 `中文 / English`，切换后会影响：
+
+- 主界面文字
+- 悬浮窗提示
+- 运行日志
+- 桌面模式模型输出
+- 视频模式模型输出
+- 视频报告标题和部分说明文字
 
 ## 一键启动
 
-如果你已经把 CUDA 版 `llama.cpp` 放到了程序目录下的 `llama_cuda` 文件夹，最方便的启动方式是直接双击：
+如果你已经把 CUDA 版 `llama.cpp` 放到项目目录下的 `llama_cuda` 文件夹中，最方便的启动方式是直接双击：
 
 - `start_study_lens.bat`
 
-这个启动器会自动完成以下步骤：
+启动器会自动：
 
 1. 检查本地 AI 服务是否已经在 `http://127.0.0.1:8080` 运行
-2. 如果没有运行，就自动启动 `llama_cuda\llama-server.exe`
-3. 自动打开 Study Lens 主程序
+2. 如果没有运行，就自动启动 `llama_cuda\\llama-server.exe`
+3. 再自动打开 Study Lens 主程序
 
-## 第一次使用
+## 首次使用
 
 ### 1. 准备 Python 环境
 
@@ -29,21 +38,20 @@ python -m pip install -r requirements.txt
 
 ### 2. 准备 CUDA 版 llama.cpp
 
-请确认以下文件存在：
+请确认这些文件存在：
 
-- `llama_cuda\llama-server.exe`
-- `llama_cuda\ggml-cuda.dll`
-下载地址：https://github.com/ggml-org/llama.cpp/releases/download/b8827/llama-b8827-bin-win-cuda-12.4-x64.zip
+- `llama_cuda\\llama-server.exe`
+- `llama_cuda\\ggml-cuda.dll`
 
-### 3. 直接双击启动
+### 3. 启动程序
+
+直接双击：
 
 ```text
 start_study_lens.bat
 ```
 
 ## 手动启动
-
-如果你更想手动启动，也可以分两步：
 
 ### 1. 启动本地 AI 服务
 
@@ -57,7 +65,7 @@ start_study_lens.bat
 http://127.0.0.1:8080
 ```
 
-### 2. 启动程序
+### 2. 启动主程序
 
 ```powershell
 . .\.venv\Scripts\Activate.ps1
@@ -67,13 +75,14 @@ python .\main.py
 ## 桌面学习模式
 
 1. 启动程序
-2. 确认 `AI 服务地址` 保持为默认值 `http://127.0.0.1:8080`
-3. 点击“刷新窗口列表”
-4. 选择要分析的窗口
-5. 按需要调整：
+2. 在顶部选择界面语言：`中文` 或 `English`
+3. 确认 `AI 服务地址` 保持为默认值 `http://127.0.0.1:8080`
+4. 点击“刷新窗口列表”
+5. 选择需要分析的目标窗口
+6. 按需调整：
    - `检测间隔`
    - `触发阈值`
-6. 点击“启动桌面学习模式”
+7. 点击“启动桌面学习模式”
 
 建议的起始参数：
 
@@ -88,11 +97,12 @@ python .\main.py
 ## 讲座视频模式
 
 1. 保持本地 AI 服务运行
-2. 点击“选择讲座视频分析”
-3. 选择视频文件
-4. 等待程序输出结果
+2. 选择界面语言
+3. 点击“选择讲座视频分析”
+4. 选中视频文件
+5. 等待程序输出结果
 
-分析完成后，会在输出目录生成：
+分析完成后，输出目录中通常会包含：
 
 - `report.md`
 - `annotated_video.mp4`
@@ -100,7 +110,7 @@ python .\main.py
 
 ## 输出位置
 
-默认输出目录是程序下的 `output` 文件夹。
+默认输出目录是项目下的 `output` 文件夹。
 
 每次分析视频时，程序都会自动新建一个带时间戳的子目录，方便区分不同结果。
 
@@ -111,8 +121,8 @@ python .\main.py
 请检查：
 
 - `.venv` 是否已经创建
-- `llama_cuda` 文件夹是否在程序目录下
-- `llama_cuda\llama-server.exe` 是否存在
+- `llama_cuda` 文件夹是否存在
+- `llama_cuda\\llama-server.exe` 是否存在
 
 ### 提示无法连接 AI 服务
 
@@ -124,7 +134,7 @@ http://127.0.0.1:8080
 
 ### 视频右侧注释文字异常
 
-请确认系统中有可用的中文字体，例如：
+请确认系统中存在可用字体，例如：
 
 - 微软雅黑
 - 黑体

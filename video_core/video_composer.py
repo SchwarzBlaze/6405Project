@@ -17,6 +17,7 @@ from typing import NamedTuple
 import numpy as np
 from PIL import Image, ImageDraw, ImageFont
 
+from app_i18n import model_output_language, tr
 from .slide_detector import Segment
 
 logger = logging.getLogger(__name__)
@@ -99,6 +100,11 @@ def _load_fonts(size: int):
         "No annotation font with CJK support was found. Falling back to Pillow default font."
     )
     return d, d, d
+
+
+def _get_truncation_notice(language: str | None) -> str:
+    ui_language = "en" if model_output_language(language) == "English" else "zh"
+    return tr(ui_language, "truncation_notice")
 
 
 # ── Rich-text helpers ─────────────────────────────────────────────────────
@@ -364,9 +370,10 @@ def _truncate_layout(
     draw: ImageDraw.ImageDraw,
     layout: _PanelLayout,
     size: tuple[int, int],
+    truncation_notice: str,
 ) -> _PanelLayout:
     w, h = size
-    notice_spans = [_Span(TRUNCATION_NOTICE, False)]
+    notice_spans = [_Span(truncation_notice, False)]
     notice_wrapped = _wrap_rich_spans(
         draw,
         notice_spans,
@@ -434,6 +441,7 @@ def _render_text_panel(
     body: str,
     size: tuple[int, int],
     font_size: int = 15,
+    truncation_notice: str | None = None,
 ) -> np.ndarray:
     w, h = size
     img = Image.new("RGB", (w, h), color=BG_COLOR)
@@ -451,7 +459,7 @@ def _render_text_panel(
         layout = _build_panel_layout(draw, body, size, MIN_PANEL_FONT_SIZE)
 
     if layout.overflow:
-        layout = _truncate_layout(draw, layout, size)
+        layout = _truncate_layout(draw, layout, size, truncation_notice or _get_truncation_notice("Chinese"))
 
     for line in layout.lines:
         if line.bullet:
@@ -483,6 +491,7 @@ def compose_annotated_video(
     output_path: str,
     panel_width: int | None = None,
     font_size: int | None = None,
+    language: str | None = "Chinese",
 ) -> None:
     """Create *output_path* = original video (left) + analysis panel (right)."""
     from moviepy import VideoFileClip, ImageClip, CompositeVideoClip
@@ -494,6 +503,7 @@ def compose_annotated_video(
 
     if font_size is None:
         font_size = max(13, min(17, vh // 24))
+    truncation_notice = _get_truncation_notice(language)
 
     logger.info(
         "Composing annotated video (%dx%d, %d segments, font=%dpx) ...",
@@ -507,7 +517,12 @@ def compose_annotated_video(
     clips = [bg, video_clip]
 
     for i, (seg, text) in enumerate(zip(segments, analyses)):
-        panel_img = _render_text_panel(text, (pw, canvas_h), font_size)
+        panel_img = _render_text_panel(
+            text,
+            (pw, canvas_h),
+            font_size,
+            truncation_notice=truncation_notice,
+        )
 
         start = seg.start_time
         end = video.duration if i == len(segments) - 1 else segments[i + 1].start_time

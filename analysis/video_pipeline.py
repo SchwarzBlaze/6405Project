@@ -6,6 +6,7 @@ import os
 from pathlib import Path
 from typing import Callable
 
+from app_i18n import normalize_ui_language, tr
 from video_core.analyzer import (
     LectureContext,
     VideoType,
@@ -34,11 +35,13 @@ def run_video_analysis(
     min_duration: float | None = None,
     max_tokens: int = 1024,
     language: str | None = "Chinese",
+    ui_language: str = "zh",
     use_audio: bool = False,
     whisper_model: str = "base",
     log_callback: LogFn = None,
     should_stop: StopFn = None,
 ) -> dict:
+    ui_language = normalize_ui_language(ui_language)
     video_path = os.path.abspath(video_path)
     output_dir = os.path.abspath(output_dir)
     frames_dir = os.path.join(output_dir, "frames")
@@ -53,23 +56,23 @@ def run_video_analysis(
 
     def guard() -> None:
         if stopped():
-            raise InterruptedError("视频分析已停止。")
+            raise InterruptedError(tr(ui_language, "video_analysis_stopped"))
 
     if not os.path.isfile(video_path):
         raise FileNotFoundError(video_path)
 
-    log("读取视频信息...")
+    log(tr(ui_language, "reading_video_info"))
     vinfo = get_video_info(video_path)
     guard()
 
-    log("连接 AI 服务...")
+    log(tr(ui_language, "connecting_ai"))
     model, processor = load_model(server_url=server_url)
     guard()
 
-    log(f"抽帧中（{fps:.1f} fps）...")
+    log(tr(ui_language, "extracting_frames", fps=fps))
     frames, timestamps = extract_frames(video_path, fps=fps)
     if not frames:
-        raise RuntimeError("未能从视频中提取到画面。")
+        raise RuntimeError(tr(ui_language, "no_frames_extracted"))
     guard()
 
     frame_paths: list[str] = []
@@ -80,11 +83,11 @@ def run_video_analysis(
     guard()
 
     if mode == "auto":
-        log("识别视频类型...")
+        log(tr(ui_language, "recognizing_video_type"))
         video_type = classify_video_type(model, processor, frame_paths)
     else:
         video_type = VideoType(mode.upper())
-    log(f"视频类型: {video_type.value}")
+    log(tr(ui_language, "video_type", value=video_type.value))
     guard()
 
     defaults = get_defaults_for_type(video_type)
@@ -92,7 +95,7 @@ def run_video_analysis(
     min_duration = min_duration if min_duration is not None else defaults["min_duration"]
     representative = defaults["representative"]
 
-    log("切分讲座片段...")
+    log(tr(ui_language, "splitting_video_segments"))
     if video_type == VideoType.TEACHER_ONLY:
         segments = time_based_segments(frames, timestamps, interval=30.0)
     else:
@@ -114,7 +117,7 @@ def run_video_analysis(
     full_transcript: str | None = None
 
     if use_audio and vinfo["has_audio"]:
-        log("提取并转录音频...")
+        log(tr(ui_language, "transcribing_audio"))
         audio_path = os.path.join(output_dir, "audio.wav")
         extract_audio(video_path, audio_path)
         transcription = transcribe(audio_path, model_size=whisper_model)
@@ -126,7 +129,16 @@ def run_video_analysis(
 
     for idx, seg in enumerate(segments):
         guard()
-        log(f"分析片段 {idx + 1}/{len(segments)} ({seg.start_time:.1f}s - {seg.end_time:.1f}s)")
+        log(
+            tr(
+                ui_language,
+                "analyzing_segment",
+                index=idx + 1,
+                total=len(segments),
+                start=seg.start_time,
+                end=seg.end_time,
+            )
+        )
         audio_text = None
         if transcription:
             audio_text = get_transcript_for_range(
@@ -152,10 +164,10 @@ def run_video_analysis(
         context.add(seg.index, LectureContext.extract_summary(analysis))
 
     guard()
-    log("生成整体总结...")
+    log(tr(ui_language, "generating_summary"))
     summary = generate_summary(model, processor, analyses, max_tokens=max_tokens)
 
-    log("写出 Markdown 报告...")
+    log(tr(ui_language, "writing_report"))
     report_path = generate_report(
         video_path,
         vinfo,
@@ -165,12 +177,13 @@ def run_video_analysis(
         summary,
         output_dir,
         transcript_text=full_transcript,
+        language=language,
     )
     guard()
 
-    log("合成注释视频...")
+    log(tr(ui_language, "composing_video"))
     output_video = os.path.join(output_dir, "annotated_video.mp4")
-    compose_annotated_video(video_path, segments, analyses, output_video)
+    compose_annotated_video(video_path, segments, analyses, output_video, language=language)
 
     return {
         "video_path": video_path,
